@@ -1,0 +1,48 @@
+<!doctype html>
+<notebook theme="midnight">
+  <title>Data Desk research</title>
+
+  <script id="header" type="text/markdown">
+    # Research
+    *${dateText}*
+
+    This is an index of Data Desk research notebooks, which are hosted on [GitHub](https://github.com/data-desk-eco). For the work they support, check our [Substack](https://blog.datadesk.eco/) and [media mentions](https://research.datadesk.eco/media/).
+  </script>
+
+  <script id="hero" type="text/html">
+    <figure class="hero">
+      <img src="assets/hero.jpg" />
+    </figure>
+  </script>
+
+  <script id="projects" output="projects" type="application/sql" database="../data/data.duckdb" hidden>
+    SELECT
+      name,
+      description,
+      url,
+      repo_url,
+      created_at
+    FROM projects
+    ORDER BY created_at DESC
+  </script>
+
+  <script id="main" type="module">
+    display(html`<ul style="list-style: none; padding-left: 0;">
+      ${projects.map(p => {
+        const date = new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        return html`<li style="margin: 1rem 0;">
+          <div><a href="${p.url}">${p.name}</a> (<a href="${p.repo_url}">repo</a>)</div>
+          ${p.description ? html`<div style="color: var(--theme-foreground-muted); font-size: 0.9em;">${p.description}</div>` : ''}
+          <div style="color: var(--theme-foreground-muted); font-size: 0.9em;">${date}</div>
+        </li>`;
+      })}
+    </ul>`);
+  </script>
+
+  <script id="last_updated" type="module" hidden>
+    const lastUpdated = await FileAttachment("../data/last_updated.json").json();
+    const commitDate = new Date(lastUpdated.date);
+    const dateText = commitDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  </script>
+
+</notebook>

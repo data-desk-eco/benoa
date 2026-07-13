@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f docs/index.html ]; then gh api repos/data-desk-eco/.github/tarball/main 2>/dev/null | tar -xz --strip-components=1 --wildcards '*/.claude' '*/template.html' 2>/dev/null || echo 'warning: failed to refresh skills + template from data-desk-eco/.github (check network / gh auth status)' >&2; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
