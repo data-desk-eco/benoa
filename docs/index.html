@@ -6,20 +6,19 @@
     # Data Notebook on Benoa LNG Import Terminal
     *${dateText}*
 
-    The Benoa LNG import terminal sits in the port of Benoa, on the south-east tip
-    of Bali. It began importing LNG in 2016, storing and regasifying the gas aboard
-    a moored floating storage and regasification unit (FSRU) — first the *HSY*, then
-    from 2018 the *Karunia Dewata* — and piping the regasified gas to the
-    Pesanggaran power plant that supplies much of the island's electricity.
+    The Benoa LNG import terminal is located in Tanjung Benoa, on the south-east
+    tip of Bali. It began importing LNG in 2016, initially via the *HSY* vessel,
+    then from 2018 onwards the *Karunia Dewata* vessel. Once the LNG is regasified
+    it is sent to the Pesanggaran power plant, which supplies around 30% of Bali's
+    electricity.
 
-    It is a small-scale operation. Most cargoes are only around 10,000 tonnes of
-    LNG, against roughly 70,000 tonnes for a standard ocean-going cargo, so the
-    terminal is fed by frequent small shuttle deliveries rather than the large
-    carriers that serve export-scale import terminals. Nominal throughput is about
-    0.38 billion cubic metres of gas a year.
+    The Benoa terminal is a small-scale operation. Most cargoes are only around
+    10,000 tonnes of LNG, which is much smaller than the average 70,000 tonnes for
+    a standard LNG cargo. This makes Benoa different to other major import terminals
+    in Indonesia like Lampung or Jawa Satu.
 
-    This notebook looks at the terminal through three lenses: the **trade flows**
-    of LNG arriving at it, the **shipping routes** the carriers run, and
+    This data notebook looks at the terminal through three lenses: the **trade
+    flows** of LNG arriving at it, the **shipping routes** the carriers run, and
     **satellite imagery** of the site itself. Cargo and position data are from
     Kpler and Global Fishing Watch; imagery is Esri World Imagery.
 
@@ -30,12 +29,11 @@
     ## Trade flows
 
     Every LNG cargo delivered to the terminal since 2016, split by the installation
-    the gas was loaded at. Volumes are the discharged quantity in cubic metres of
-    LNG.
+    the gas was loaded at. Volumes are the discharged quantity in tonnes of LNG.
   </script>
 
   <script id="benoa_sql" output="benoa" type="application/sql" database="../data/data.duckdb" hidden>
-    SELECT year, origin, volume_m3 / 1000.0 AS k_m3, cargoes
+    SELECT year, origin, mass_t / 1000.0 AS kt, cargoes
     FROM benoa_lng_by_origin
     ORDER BY year, origin
   </script>
@@ -51,20 +49,20 @@
     const rows = benoa.map(d => ({
       year: Number(d.year),
       origin: d.origin,
-      k_m3: Number(d.k_m3),
+      kt: Number(d.kt),
       cargoes: Number(d.cargoes),
     }));
     const maxYear = Math.max(...rows.map(d => d.year));
 
     display(Plot.plot({
       title: "LNG deliveries to Benoa FSU by origin installation",
-      subtitle: `Discharged volume, thousand m³ of LNG · ${maxYear} is year-to-date`,
+      subtitle: `Discharged LNG, thousand tonnes · ${maxYear} is year-to-date`,
       width: 880,
       height: 460,
       marginLeft: 56,
       marginBottom: 40,
       x: { label: null, tickFormat: "d" },
-      y: { label: "Volume delivered (thousand m³)", grid: true },
+      y: { label: "LNG delivered (thousand tonnes)", grid: true },
       color: {
         domain: originOrder,
         range: originOrder.map(o => originColour[o]),
@@ -73,7 +71,7 @@
       marks: [
         Plot.barY(rows, {
           x: "year",
-          y: "k_m3",
+          y: "kt",
           fill: "origin",
           order: originOrder,
           insetLeft: 1,
@@ -82,7 +80,7 @@
           channels: {
             Origin: { value: "origin" },
             Year: { value: "year" },
-            "Volume (k m³)": { value: d => d.k_m3.toFixed(0) },
+            "LNG (kt)": { value: d => d.kt.toFixed(0) },
             Cargoes: { value: "cargoes" },
           },
         }),
@@ -92,21 +90,19 @@
   </script>
 
   <script id="trade_findings" type="text/markdown">
-    **Bontang is the mainstay.** Of 237 cargoes since 2016, 190 loaded at the
-    Bontang LNG plant in East Kalimantan — the terminal's default supplier for the
-    whole record.
+    **Most cargoes come from Bontang.** Of 237 cargoes since 2016, 190 loaded at
+    the Bontang LNG plant in East Kalimantan — the terminal's default supplier for
+    the whole record.
 
     **A supply switch in 2022–23.** Deliveries from the Jawa Satu FSRU off West
-    Java ramped up sharply, peaking in 2023 when it supplied 602 of the year's
-    647 thousand m³ and Bontang fell to a single small cargo. Bontang volumes
-    recovered from 2024 and the terminal returned to its dominant role.
+    Java ramped up sharply, peaking in 2023. Bontang volumes recovered from 2024.
 
     **Two one-off origins.** A single cargo arrived from Russia's Yamal plant in
     2021, and one from Donggi-Senoro in Sulawesi in 2025.
 
     **Deliveries are trending up.** Annual throughput has grown from around
-    360 thousand m³ in 2016 to a record 738 thousand m³ in 2025, as island gas
-    demand has risen.
+    166 thousand tonnes in 2016 to a record 340 thousand tonnes in 2025, as island
+    gas demand has risen.
 
     ---
   </script>
@@ -114,12 +110,12 @@
   <script id="shipping_intro" type="text/markdown">
     ## Shipping routes
 
-    Almost all Bontang cargoes are shuttled by a single small LNG carrier, with
+    Almost all Bontang cargoes are delivered by a single small LNG carrier, with
     two others stepping in occasionally.
   </script>
 
   <script id="vessels_sql" output="vessels" type="application/sql" database="../data/data.duckdb" hidden>
-    SELECT year, vessel, SUM(volume_m3) / 1000.0 AS k_m3, COUNT(*) AS cargoes
+    SELECT year, vessel, SUM(mass_t) / 1000.0 AS kt, COUNT(*) AS cargoes
     FROM benoa_lng_trades
     WHERE origin = 'Bontang'
     GROUP BY year, vessel
@@ -136,19 +132,19 @@
     const vrows = vessels.map(d => ({
       year: Number(d.year),
       vessel: d.vessel,
-      k_m3: Number(d.k_m3),
+      kt: Number(d.kt),
       cargoes: Number(d.cargoes),
     }));
 
     display(Plot.plot({
       title: "Vessels carrying Bontang cargoes to Benoa",
-      subtitle: "Discharged volume, thousand m³ of LNG",
+      subtitle: "Discharged LNG, thousand tonnes",
       width: 880,
       height: 380,
       marginLeft: 56,
       marginBottom: 40,
       x: { label: null, tickFormat: "d" },
-      y: { label: "Volume delivered (thousand m³)", grid: true },
+      y: { label: "LNG delivered (thousand tonnes)", grid: true },
       color: {
         domain: vesselOrder,
         range: vesselOrder.map(v => vesselColour[v]),
@@ -157,7 +153,7 @@
       marks: [
         Plot.barY(vrows, {
           x: "year",
-          y: "k_m3",
+          y: "kt",
           fill: "vessel",
           order: vesselOrder,
           insetLeft: 1,
@@ -166,7 +162,7 @@
           channels: {
             Vessel: { value: "vessel" },
             Year: { value: "year" },
-            "Volume (k m³)": { value: d => d.k_m3.toFixed(0) },
+            "LNG (kt)": { value: d => d.kt.toFixed(0) },
             Cargoes: { value: "cargoes" },
           },
         }),
@@ -369,9 +365,7 @@
   </script>
 
   <script id="satellite_note" type="text/markdown">
-    *Imagery: Google Earth Pro (© Maxar Technologies, Landsat / Copernicus). An
-    automated Sentinel-2 time series tracking the storage unit and visiting
-    carriers over time is a planned addition.*
+    *Imagery: Google Earth Pro (© Maxar Technologies, Landsat / Copernicus).*
   </script>
 
   <script id="last_updated" type="module" hidden>
