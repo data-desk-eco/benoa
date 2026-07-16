@@ -1,42 +1,330 @@
 <!doctype html>
 <notebook theme="midnight">
-  <title>Data Desk research</title>
+  <title>Data Notebook on Benoa LNG Import Terminal</title>
 
   <script id="header" type="text/markdown">
-    # Research
+    # Data Notebook on Benoa LNG Import Terminal
     *${dateText}*
 
-    This is an index of Data Desk research notebooks, which are hosted on [GitHub](https://github.com/data-desk-eco). For the work they support, check our [Substack](https://blog.datadesk.eco/) and [media mentions](https://research.datadesk.eco/media/).
+    The Benoa LNG floating storage unit (FSU) sits in the port of Benoa, Bali, and
+    supplies regasified natural gas to power generation on the island. It is a
+    small-scale terminal — nominal throughput around 0.38 billion cubic metres of
+    gas a year — fed by shuttle cargoes rather than the large ocean-going carriers
+    that serve export-scale import terminals.
+
+    This notebook looks at the terminal through three lenses: the **trade flows**
+    of LNG arriving at it, the **shipping routes** the carriers run, and
+    **satellite imagery** of the site itself. Cargo and position data are from
+    Kpler; imagery is Esri World Imagery.
+
+    ---
   </script>
 
-  <script id="hero" type="text/html">
-    <figure class="hero">
-      <img src="assets/hero.jpg" />
-    </figure>
+  <script id="trade_intro" type="text/markdown">
+    ## Trade flows
+
+    Every LNG cargo delivered to the terminal since 2016, split by the installation
+    the gas was loaded at. Volumes are the discharged quantity in cubic metres of
+    LNG.
   </script>
 
-  <script id="projects" output="projects" type="application/sql" database="../data/data.duckdb" hidden>
-    SELECT
-      name,
-      description,
-      url,
-      repo_url,
-      created_at
-    FROM projects
-    ORDER BY created_at DESC
+  <script id="benoa_sql" output="benoa" type="application/sql" database="../data/data.duckdb" hidden>
+    SELECT year, origin, volume_m3 / 1000.0 AS k_m3, cargoes
+    FROM benoa_lng_by_origin
+    ORDER BY year, origin
   </script>
 
-  <script id="main" type="module">
-    display(html`<ul style="list-style: none; padding-left: 0;">
-      ${projects.map(p => {
-        const date = new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-        return html`<li style="margin: 1rem 0;">
-          <div><a href="${p.url}">${p.name}</a> (<a href="${p.repo_url}">repo</a>)</div>
-          ${p.description ? html`<div style="color: var(--theme-foreground-muted); font-size: 0.9em;">${p.description}</div>` : ''}
-          <div style="color: var(--theme-foreground-muted); font-size: 0.9em;">${date}</div>
-        </li>`;
-      })}
-    </ul>`);
+  <script id="chart" type="module">
+    const originOrder = ["Bontang", "Jawa Satu FSRU", "Yamal", "Donggi-Senoro LNG Plant"];
+    const originColour = {
+      "Bontang":                 "#3987e5",
+      "Jawa Satu FSRU":          "#199e70",
+      "Yamal":                   "#c98500",
+      "Donggi-Senoro LNG Plant": "#008300",
+    };
+    const rows = benoa.map(d => ({
+      year: Number(d.year),
+      origin: d.origin,
+      k_m3: Number(d.k_m3),
+      cargoes: Number(d.cargoes),
+    }));
+    const maxYear = Math.max(...rows.map(d => d.year));
+
+    display(Plot.plot({
+      title: "LNG deliveries to Benoa FSU by origin installation",
+      subtitle: `Discharged volume, thousand m³ of LNG · ${maxYear} is year-to-date`,
+      width: 880,
+      height: 460,
+      marginLeft: 56,
+      marginBottom: 40,
+      x: { label: null, tickFormat: "d" },
+      y: { label: "Volume delivered (thousand m³)", grid: true },
+      color: {
+        domain: originOrder,
+        range: originOrder.map(o => originColour[o]),
+        legend: true,
+      },
+      marks: [
+        Plot.barY(rows, {
+          x: "year",
+          y: "k_m3",
+          fill: "origin",
+          order: originOrder,
+          insetLeft: 1,
+          insetRight: 1,
+          tip: true,
+          channels: {
+            Origin: { value: "origin" },
+            Year: { value: "year" },
+            "Volume (k m³)": { value: d => d.k_m3.toFixed(0) },
+            Cargoes: { value: "cargoes" },
+          },
+        }),
+        Plot.ruleY([0]),
+      ],
+    }));
+  </script>
+
+  <script id="trade_findings" type="text/markdown">
+    **Bontang is the mainstay.** Of 237 cargoes since 2016, 190 loaded at the
+    Bontang LNG plant in East Kalimantan — the terminal's default supplier for the
+    whole record.
+
+    **A supply switch in 2022–23.** Deliveries from the Jawa Satu FSRU off West
+    Java ramped up sharply, peaking in 2023 when it supplied 602 of the year's
+    647 thousand m³ and Bontang fell to a single small cargo. Bontang volumes
+    recovered from 2024 and the terminal returned to its dominant role.
+
+    **Two one-off origins.** A single cargo arrived from Russia's Yamal plant in
+    2021, and one from Donggi-Senoro in Sulawesi in 2025.
+
+    **Deliveries are trending up.** Annual throughput has grown from around
+    360 thousand m³ in 2016 to a record 738 thousand m³ in 2025, as island gas
+    demand has risen.
+
+    ---
+  </script>
+
+  <script id="shipping_intro" type="text/markdown">
+    ## Shipping routes
+
+    Almost all Bontang cargoes are shuttled by a single small LNG carrier, with
+    two others stepping in occasionally.
+  </script>
+
+  <script id="vessels_sql" output="vessels" type="application/sql" database="../data/data.duckdb" hidden>
+    SELECT year, vessel, SUM(volume_m3) / 1000.0 AS k_m3, COUNT(*) AS cargoes
+    FROM benoa_lng_trades
+    WHERE origin = 'Bontang'
+    GROUP BY year, vessel
+    ORDER BY year, vessel
+  </script>
+
+  <script id="vessel_chart" type="module">
+    const vesselOrder = ["Triputra", "Pelita Energy", "Hai Yang Shi You 301"];
+    const vesselColour = {
+      "Triputra":             "#3987e5",
+      "Pelita Energy":        "#199e70",
+      "Hai Yang Shi You 301": "#c98500",
+    };
+    const vrows = vessels.map(d => ({
+      year: Number(d.year),
+      vessel: d.vessel,
+      k_m3: Number(d.k_m3),
+      cargoes: Number(d.cargoes),
+    }));
+
+    display(Plot.plot({
+      title: "Vessels carrying Bontang cargoes to Benoa",
+      subtitle: "Discharged volume, thousand m³ of LNG",
+      width: 880,
+      height: 380,
+      marginLeft: 56,
+      marginBottom: 40,
+      x: { label: null, tickFormat: "d" },
+      y: { label: "Volume delivered (thousand m³)", grid: true },
+      color: {
+        domain: vesselOrder,
+        range: vesselOrder.map(v => vesselColour[v]),
+        legend: true,
+      },
+      marks: [
+        Plot.barY(vrows, {
+          x: "year",
+          y: "k_m3",
+          fill: "vessel",
+          order: vesselOrder,
+          insetLeft: 1,
+          insetRight: 1,
+          tip: true,
+          channels: {
+            Vessel: { value: "vessel" },
+            Year: { value: "year" },
+            "Volume (k m³)": { value: d => d.k_m3.toFixed(0) },
+            Cargoes: { value: "cargoes" },
+          },
+        }),
+        Plot.ruleY([0]),
+      ],
+    }));
+  </script>
+
+  <script id="map_intro" type="text/markdown">
+    The track of *Triputra*, the carrier that runs almost every Bontang cargo,
+    from Global Fishing Watch AIS positions over the past year — a tight shuttle
+    between the Bontang LNG plant in East Kalimantan and the Benoa FSU off Bali.
+  </script>
+
+  <script id="map" type="module">
+    const maplibregl = (await import("npm:maplibre-gl")).default;
+
+    const css = document.createElement("style");
+    css.textContent = `
+      .maplibregl-map { position: relative; overflow: hidden; font: 12px system-ui; }
+      .maplibregl-canvas { position: absolute; top: 0; left: 0; }
+      .benoa-port-label { color: #fff; font: 600 11px system-ui; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; transform: translateY(-14px); pointer-events: none; }
+      .benoa-port-dot { width: 9px; height: 9px; border-radius: 50%; background: #e14b4b; border: 1.5px solid #fff; }
+    `;
+    document.head.appendChild(css);
+
+    const tracks = await FileAttachment("../data/vessel_tracks.geojson").json();
+    const vesselColours = Object.fromEntries(
+      tracks.features.map(f => [f.properties.vessel, f.properties.colour]));
+
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:relative;width:100%;height:520px;border-radius:4px;overflow:hidden;";
+    const container = document.createElement("div");
+    container.style.cssText = "position:absolute;inset:0;";
+    wrap.appendChild(container);
+
+    const legend = document.createElement("div");
+    legend.style.cssText = "position:absolute;top:10px;left:10px;z-index:1;background:#111a;border:1px solid #444;border-radius:4px;padding:8px 10px;font:12px/1.4 system-ui;color:#eee;";
+    legend.innerHTML = Object.entries(vesselColours).map(([v, c]) =>
+      `<div><span style="display:inline-block;width:14px;height:3px;background:${c};vertical-align:middle;margin-right:6px;"></span>${v}</div>`).join("");
+    wrap.appendChild(legend);
+    display(wrap);
+
+    const map = new maplibregl.Map({
+      container,
+      attributionControl: { compact: true },
+      style: {
+        version: 8,
+        sources: {
+          esri: {
+            type: "raster",
+            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+            tileSize: 256,
+            attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+          },
+        },
+        layers: [{ id: "esri", type: "raster", source: "esri" }],
+      },
+      center: [116.0, -4.0],
+      zoom: 5,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    const ports = [
+      { name: "Bontang LNG plant", lon: 117.47, lat: 0.13 },
+      { name: "Benoa FSU", lon: 115.21, lat: -8.74 },
+    ];
+
+    map.on("load", () => {
+      map.addSource("tracks", { type: "geojson", data: tracks });
+      map.addLayer({
+        id: "tracks-line", type: "line", source: "tracks",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "colour"], "line-width": 1.6, "line-opacity": 0.9 },
+      });
+
+      for (const p of ports) {
+        const el = document.createElement("div");
+        el.innerHTML = `<div class="benoa-port-dot"></div><div class="benoa-port-label">${p.name}</div>`;
+        new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([p.lon, p.lat]).addTo(map);
+      }
+
+      map.fitBounds([[113.0, -9.3], [118.5, 1.0]], { padding: 40, duration: 0 });
+
+      const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+      map.on("mousemove", "tracks-line", (e) => {
+        map.getCanvas().style.cursor = "pointer";
+        const v = e.features[0].properties.vessel;
+        popup.setLngLat(e.lngLat).setHTML(`<strong>${v}</strong>`).addTo(map);
+      });
+      map.on("mouseleave", "tracks-line", () => {
+        map.getCanvas().style.cursor = "";
+        popup.remove();
+      });
+    });
+  </script>
+
+  <script id="route_findings" type="text/markdown">
+    **One vessel does most of the work.** The small LNG carrier *Triputra* has run
+    the Bontang shuttle for the entire record — 180 of the 190 Bontang cargoes, and
+    the only vessel mapped here. *Pelita Energy* covered eight cargoes between 2021
+    and 2025 and *Hai Yang Shi You 301* two in the early years, but neither is
+    plotted: Pelita is a secondary relief carrier, and Hai Yang Shi You 301 left
+    the route before the AIS record shown begins.
+
+    ---
+  </script>
+
+  <script id="satellite_intro" type="text/markdown">
+    ## Satellite imagery
+
+    A close view of the terminal itself. The FSU is moored in the port of Benoa on
+    the south-east tip of Bali, where cargoes are discharged into onshore storage
+    and regasification before the gas is piped to island power plants.
+  </script>
+
+  <script id="satellite" type="module">
+    const maplibregl = (await import("npm:maplibre-gl")).default;
+
+    const css = document.createElement("style");
+    css.textContent = `
+      .maplibregl-map { position: relative; overflow: hidden; font: 12px system-ui; }
+      .maplibregl-canvas { position: absolute; top: 0; left: 0; }
+      .benoa-site-label { color: #fff; font: 600 11px system-ui; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; transform: translateY(-14px); pointer-events: none; }
+      .benoa-site-dot { width: 9px; height: 9px; border-radius: 50%; background: #e14b4b; border: 1.5px solid #fff; }
+    `;
+    document.head.appendChild(css);
+
+    const container = document.createElement("div");
+    container.style.cssText = "width:100%;height:520px;border-radius:4px;overflow:hidden;";
+    display(container);
+
+    const site = [115.2105, -8.7425];
+    const map = new maplibregl.Map({
+      container,
+      attributionControl: { compact: true },
+      style: {
+        version: 8,
+        sources: {
+          esri: {
+            type: "raster",
+            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+            tileSize: 256,
+            attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+          },
+        },
+        layers: [{ id: "esri", type: "raster", source: "esri" }],
+      },
+      center: site,
+      zoom: 14,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    map.on("load", () => {
+      const el = document.createElement("div");
+      el.innerHTML = `<div class="benoa-site-dot"></div><div class="benoa-site-label">Benoa LNG terminal</div>`;
+      new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(site).addTo(map);
+    });
+  </script>
+
+  <script id="satellite_note" type="text/markdown">
+    *Imagery is a single Esri World Imagery basemap. A time-series analysis —
+    Sentinel-2 scenes tracking the FSU and visiting carriers over time — is a
+    planned addition.*
   </script>
 
   <script id="last_updated" type="module" hidden>

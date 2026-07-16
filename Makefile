@@ -1,19 +1,25 @@
-.PHONY: build preview data clean
+.PHONY: build preview etl data clean
 
 build:
 	@echo "{\"date\": \"$$(gh api /repos/:owner/:repo/commits?per_page=1 --jq '.[0].commit.committer.date' 2>/dev/null || git log -1 --format=%cI)\"}" > data/last_updated.json
+	$(MAKE) data
+	rm -rf docs/.observable
 	yarn build
 
 preview:
 	yarn preview
 
+# Expensive, auth-gated: pull cargo-level LNG trades from Kpler into the
+# committed CSV. Needs `gcloud auth login` against project data-desk-web.
+# Run locally when refreshing the data, then commit data/benoa_lng_trades.csv.
+etl:
+	python3 scripts/fetch_benoa_lng.py
+	python3 scripts/fetch_vessel_tracks.py
+
+# CI-safe: rebuild the DuckDB tables from the committed CSV. No Kpler auth.
 data:
 	@mkdir -p data
-	@echo "Fetching repository data from GitHub API..."
-	gh api "/orgs/data-desk-eco/repos" --paginate -q \
-		'[.[] | select(.name != "data-desk-eco.github.io" and .private == false and .has_pages == true and .description != null and .description != "") | {name: .name, description: .description, url: "https://research.datadesk.eco/\(.name)/", repo_url: .html_url, created_at: .created_at}]' \
-		| jq -s 'add' \
-		| duckdb data/data.duckdb "CREATE OR REPLACE TABLE projects AS SELECT * FROM read_json('/dev/stdin')"
+	duckdb data/data.duckdb < scripts/build_benoa_lng.sql
 	@echo "Data updated"
 
 clean:
