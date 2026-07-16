@@ -6,16 +6,22 @@
     # Data Notebook on Benoa LNG Import Terminal
     *${dateText}*
 
-    The Benoa LNG floating storage unit (FSU) sits in the port of Benoa, Bali, and
-    supplies regasified natural gas to power generation on the island. It is a
-    small-scale terminal — nominal throughput around 0.38 billion cubic metres of
-    gas a year — fed by shuttle cargoes rather than the large ocean-going carriers
-    that serve export-scale import terminals.
+    The Benoa LNG import terminal sits in the port of Benoa, on the south-east tip
+    of Bali. It began importing LNG in 2016, storing and regasifying the gas aboard
+    a moored floating storage and regasification unit (FSRU) — first the *HSY*, then
+    from 2018 the *Karunia Dewata* — and piping the regasified gas to the
+    Pesanggaran power plant that supplies much of the island's electricity.
+
+    It is a small-scale operation. Most cargoes are only around 10,000 tonnes of
+    LNG, against roughly 70,000 tonnes for a standard ocean-going cargo, so the
+    terminal is fed by frequent small shuttle deliveries rather than the large
+    carriers that serve export-scale import terminals. Nominal throughput is about
+    0.38 billion cubic metres of gas a year.
 
     This notebook looks at the terminal through three lenses: the **trade flows**
     of LNG arriving at it, the **shipping routes** the carriers run, and
     **satellite imagery** of the site itself. Cargo and position data are from
-    Kpler; imagery is Esri World Imagery.
+    Kpler and Global Fishing Watch; imagery is Esri World Imagery.
 
     ---
   </script>
@@ -199,9 +205,20 @@
 
     const legend = document.createElement("div");
     legend.style.cssText = "position:absolute;top:10px;left:10px;z-index:1;background:#111a;border:1px solid #444;border-radius:4px;padding:8px 10px;font:12px/1.4 system-ui;color:#eee;";
-    legend.innerHTML = Object.entries(vesselColours).map(([v, c]) =>
-      `<div><span style="display:inline-block;width:14px;height:3px;background:${c};vertical-align:middle;margin-right:6px;"></span>${v}</div>`).join("");
+    legend.innerHTML =
+      `<div style="font-weight:700;font-size:13px;">Triputra — vessel track</div>` +
+      `<div style="color:#bbb;font-size:11px;margin:2px 0 7px;">Past year · Global Fishing Watch AIS · one vessel shown</div>` +
+      Object.entries(vesselColours).map(([v, c]) =>
+        `<div><span style="display:inline-block;width:14px;height:3px;background:${c};vertical-align:middle;margin-right:6px;"></span>${v}</div>`).join("");
     wrap.appendChild(legend);
+
+    const views = document.createElement("div");
+    views.style.cssText = "position:absolute;bottom:10px;right:10px;z-index:1;display:flex;gap:3px;background:#111a;border:1px solid #444;border-radius:4px;padding:3px;font:12px system-ui;";
+    views.innerHTML = `
+      <button data-view="terminal" style="padding:5px 10px;border:none;border-radius:3px;cursor:pointer;">Terminal</button>
+      <button data-view="route" style="padding:5px 10px;border:none;border-radius:3px;cursor:pointer;">Full route</button>
+    `;
+    wrap.appendChild(views);
     display(wrap);
 
     const map = new maplibregl.Map({
@@ -219,10 +236,25 @@
         },
         layers: [{ id: "esri", type: "raster", source: "esri" }],
       },
-      center: [116.0, -4.0],
-      zoom: 5,
+      center: [115.21, -8.74],
+      zoom: 11,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    const TERMINAL = { center: [115.21, -8.74], zoom: 11 };
+    const ROUTE_BOUNDS = [[113.0, -9.3], [118.5, 1.0]];
+    const btnTerminal = views.querySelector('[data-view="terminal"]');
+    const btnRoute = views.querySelector('[data-view="route"]');
+    const setActive = (active) => {
+      for (const b of [btnTerminal, btnRoute]) {
+        const on = b === active;
+        b.style.background = on ? "#333" : "transparent";
+        b.style.color = on ? "#fff" : "#aaa";
+      }
+    };
+    btnTerminal.onclick = () => { map.flyTo({ ...TERMINAL, duration: 800 }); setActive(btnTerminal); };
+    btnRoute.onclick = () => { map.fitBounds(ROUTE_BOUNDS, { padding: 40, duration: 800 }); setActive(btnRoute); };
+    setActive(btnTerminal);
 
     const ports = [
       { name: "Bontang LNG plant", lon: 117.47, lat: 0.13 },
@@ -230,7 +262,7 @@
     ];
 
     map.on("load", () => {
-      map.addSource("tracks", { type: "geojson", data: tracks });
+      map.addSource("tracks", { type: "geojson", data: tracks, attribution: "Vessel track: Global Fishing Watch" });
       map.addLayer({
         id: "tracks-line", type: "line", source: "tracks",
         layout: { "line-cap": "round", "line-join": "round" },
@@ -242,8 +274,6 @@
         el.innerHTML = `<div class="benoa-port-dot"></div><div class="benoa-port-label">${p.name}</div>`;
         new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([p.lon, p.lat]).addTo(map);
       }
-
-      map.fitBounds([[113.0, -9.3], [118.5, 1.0]], { padding: 40, duration: 0 });
 
       const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
       map.on("mousemove", "tracks-line", (e) => {
@@ -272,59 +302,76 @@
   <script id="satellite_intro" type="text/markdown">
     ## Satellite imagery
 
-    A close view of the terminal itself. The FSU is moored in the port of Benoa on
-    the south-east tip of Bali, where cargoes are discharged into onshore storage
-    and regasification before the gas is piped to island power plants.
+    The terminal occupies a wharf in the port of Benoa, on the south-east tip of
+    Bali. High-resolution imagery over the past decade shows how the site changed
+    as LNG imports began and the floating storage unit was installed and replaced.
   </script>
 
-  <script id="satellite" type="module">
-    const maplibregl = (await import("npm:maplibre-gl")).default;
+  <script id="gallery_intro" type="text/markdown">
+    ### The terminal over time
 
-    const css = document.createElement("style");
-    css.textContent = `
-      .maplibregl-map { position: relative; overflow: hidden; font: 12px system-ui; }
-      .maplibregl-canvas { position: absolute; top: 0; left: 0; }
-      .benoa-site-label { color: #fff; font: 600 11px system-ui; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; transform: translateY(-14px); pointer-events: none; }
-      .benoa-site-dot { width: 9px; height: 9px; border-radius: 50%; background: #e14b4b; border: 1.5px solid #fff; }
+    Historical high-resolution views of the wharf, showing the arrival and change
+    of the FSRU as the terminal came into service.
+  </script>
+
+  <script id="gallery" type="module">
+    const shots = [
+      { f: FileAttachment("./assets/benoa-2015-05.jpg"), date: "May 2015",
+        note: "Before LNG imports began — the wharf handles fuel storage and fishing and service vessels, with no storage unit moored alongside." },
+      { f: FileAttachment("./assets/benoa-2016-05.jpg"), date: "May 2016",
+        note: "Imports underway: the first FSRU, the HSY, moored at the main wharf." },
+      { f: FileAttachment("./assets/benoa-2019-06.jpg"), date: "June 2019",
+        note: "The larger Karunia Dewata FSRU, on station since 2018, moored at the wharf." },
+      { f: FileAttachment("./assets/benoa-2025-05.jpg"), date: "May 2025",
+        note: "The Karunia Dewata still on station, with a smaller shuttle carrier alongside discharging a cargo." },
+    ];
+    for (const s of shots) s.url = await s.f.url();
+
+    let i = 0;
+    const root = document.createElement("div");
+    root.style.cssText = "max-width:1000px;margin:0 auto;";
+    root.innerHTML = `
+      <div style="position:relative;border-radius:6px;overflow:hidden;background:#000;">
+        <img id="g-img" style="width:100%;height:auto;display:block;" />
+        <button id="g-prev" aria-label="Previous image" style="position:absolute;top:50%;left:12px;transform:translateY(-50%);width:44px;height:44px;border:none;border-radius:50%;background:#000a;color:#fff;font-size:24px;line-height:1;cursor:pointer;">‹</button>
+        <button id="g-next" aria-label="Next image" style="position:absolute;top:50%;right:12px;transform:translateY(-50%);width:44px;height:44px;border:none;border-radius:50%;background:#000a;color:#fff;font-size:24px;line-height:1;cursor:pointer;">›</button>
+        <div id="g-counter" style="position:absolute;top:12px;right:14px;background:#000a;color:#fff;font:12px system-ui;padding:3px 9px;border-radius:12px;"></div>
+      </div>
+      <div id="g-dots" style="display:flex;gap:7px;justify-content:center;margin-top:12px;"></div>
+      <figcaption id="g-cap" style="margin-top:10px;font:13px/1.5 system-ui;color:var(--theme-foreground-muted);text-align:center;"></figcaption>
     `;
-    document.head.appendChild(css);
+    display(root);
 
-    const container = document.createElement("div");
-    container.style.cssText = "width:100%;height:520px;border-radius:4px;overflow:hidden;";
-    display(container);
-
-    const site = [115.2105, -8.7425];
-    const map = new maplibregl.Map({
-      container,
-      attributionControl: { compact: true },
-      style: {
-        version: 8,
-        sources: {
-          esri: {
-            type: "raster",
-            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-            tileSize: 256,
-            attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
-          },
-        },
-        layers: [{ id: "esri", type: "raster", source: "esri" }],
-      },
-      center: site,
-      zoom: 14,
+    const img = root.querySelector("#g-img");
+    const cap = root.querySelector("#g-cap");
+    const counter = root.querySelector("#g-counter");
+    const dots = shots.map((_, k) => {
+      const d = document.createElement("button");
+      d.setAttribute("aria-label", `Go to image ${k + 1}`);
+      d.style.cssText = "width:10px;height:10px;border-radius:50%;border:none;padding:0;cursor:pointer;";
+      d.onclick = () => show(k);
+      root.querySelector("#g-dots").appendChild(d);
+      return d;
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-    map.on("load", () => {
-      const el = document.createElement("div");
-      el.innerHTML = `<div class="benoa-site-dot"></div><div class="benoa-site-label">Benoa LNG terminal</div>`;
-      new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(site).addTo(map);
-    });
+    function show(k) {
+      i = (k + shots.length) % shots.length;
+      const s = shots[i];
+      img.src = s.url;
+      img.alt = `Benoa terminal, ${s.date}`;
+      cap.innerHTML = `<strong style="color:var(--theme-foreground);">${s.date}.</strong> ${s.note}`;
+      counter.textContent = `${i + 1} / ${shots.length}`;
+      dots.forEach((d, k2) => d.style.background = k2 === i ? "var(--theme-foreground)" : "#888");
+    }
+    root.querySelector("#g-prev").onclick = () => show(i - 1);
+    root.querySelector("#g-next").onclick = () => show(i + 1);
+    show(0);
   </script>
 
   <script id="satellite_note" type="text/markdown">
-    *Imagery is a single Esri World Imagery basemap. A time-series analysis —
-    Sentinel-2 scenes tracking the FSU and visiting carriers over time — is a
-    planned addition.*
+    *Imagery: Google Earth Pro (© Maxar Technologies, Landsat / Copernicus). An
+    automated Sentinel-2 time series tracking the storage unit and visiting
+    carriers over time is a planned addition.*
   </script>
 
   <script id="last_updated" type="module" hidden>
